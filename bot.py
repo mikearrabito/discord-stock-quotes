@@ -17,7 +17,7 @@ if api_key is None:
 if discord_token is None:
     raise Exception("Discord bot token missing")
 
-bot = commands.Bot(command_prefix="!")
+bot = commands.Bot(command_prefix=".")
 finnhub_client = finnhub.Client(api_key)
 
 MONTH_TO_QUARTER = {
