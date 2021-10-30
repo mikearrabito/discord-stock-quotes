@@ -1,5 +1,7 @@
 import unittest
 
+# TODO: tests
+
 
 class BotInitTestCase(unittest.TestCase):
     def test(self):
