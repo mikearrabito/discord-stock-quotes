@@ -11,4 +11,5 @@ Finnhub Python API Client\
 discord.py\
 matplotlib\
 mplfinance\
-pandas
+pandas\
+pandas_ta

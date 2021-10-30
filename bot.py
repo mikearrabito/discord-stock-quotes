@@ -2,8 +2,9 @@ import finnhub
 import discord
 from discord.ext import commands
 from datetime import date, timedelta, datetime
-from matplotlib.pyplot import savefig
+from matplotlib.pyplot import hlines, savefig, ylabel
 import pandas as pd
+import pandas_ta as ta
 import mplfinance as mpf
 import os
 
@@ -246,7 +247,6 @@ async def chart(ctx, symbol="", type=""):
 
     if len(type) != 0 and type.lower() not in CHART_TYPES:
         # if no chart type given, default is 15 min candle chart
-        # other types are 1d, 1m, 1y candles
         await ctx.send("Invalid chart type")
         return
 
@@ -261,9 +261,9 @@ async def chart(ctx, symbol="", type=""):
     if type == '1':
         from_timestamp -= timedelta(seconds=60*60*5)
     elif type == '5':
-        from_timestamp -= timedelta(seconds=60*60*15)
+        from_timestamp -= timedelta(seconds=60*60*20)
     elif type == '15':
-        from_timestamp -= timedelta(seconds=60*60*24)
+        from_timestamp -= timedelta(seconds=60*60*60)
     elif type == '30':
         from_timestamp -= timedelta(seconds=60*60*24*10)
     elif type == '60':
@@ -296,8 +296,30 @@ async def chart(ctx, symbol="", type=""):
 
     filename = str(datetime.now().timestamp()) + symbol + ".png"
 
-    mpf.plot(data, type='candle', style='nightclouds', mav=(
-        3, 15), volume=True, savefig=dict(fname=filename, bbox_inches='tight'))
+    time_period = ""
+
+    if type.isnumeric():
+        time_period = type + "m"
+    else:
+        time_period = type.upper()
+
+    rsi_chart = ta.rsi(data['Close'])
+    rsi = mpf.make_addplot(
+        rsi_chart, panel=2, ylabel="RSI", secondary_y=False)
+
+    upper_line = pd.DataFrame(rsi_chart)
+    lower_line = pd.DataFrame(rsi_chart)
+    upper_line["RSI_14"] = [70] * len(upper_line)
+    lower_line["RSI_14"] = [30] * len(upper_line)
+
+    rsi_upper_line = mpf.make_addplot(
+        upper_line, panel=2, color='r', secondary_y=False)
+    rsi_lower_line = mpf.make_addplot(
+        lower_line, panel=2, color='g', secondary_y=False)
+
+    mpf.plot(data, type='candle', title=f"{symbol} ({time_period})", style='yahoo', mav=(
+        3, 15), volume=True, panel_ratios=(1, 0.2, 0.2), addplot=[rsi, rsi_upper_line, rsi_lower_line],
+        savefig=dict(fname=filename, bbox_inches='tight'), scale_padding={'left': 1, 'top': 0.3, 'right': 1, 'bottom': 1})
 
     await ctx.send(file=discord.File(filename))
     os.remove(filename)
