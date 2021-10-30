@@ -8,4 +8,7 @@ api_key.txt - Finnhub API key
 ## Dependencies
 
 Finnhub Python API Client\
-discord.py
+discord.py\
+matplotlib\
+mplfinance\
+pandas
