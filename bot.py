@@ -2,6 +2,11 @@ import finnhub
 import discord
 from discord.ext import commands
 from datetime import date, timedelta, datetime
+from matplotlib.pyplot import savefig
+import pandas as pd
+import mplfinance as mpf
+import os
+
 
 api_key = None
 discord_token = None
@@ -42,6 +47,8 @@ MONTHS = {
     "12": "Dec"
 }
 
+CHART_TYPES = set(['1', '5', '15', '30', '60', 'd', 'w', 'm'])
+
 
 @bot.event
 async def on_ready():
@@ -64,14 +71,14 @@ async def on_message(message):
 
 
 @bot.command()
-async def price(ctx, arg=""):
+async def price(ctx, symbol=""):
     """Returns the current price, and change for the day for a stock symbol"""
-    if len(arg) == 0:
+    if len(symbol) == 0:
         await ctx.send("Invalid symbol")
         return
 
-    arg = arg.upper()
-    data = finnhub_client.quote(arg)
+    symbol = symbol.upper()
+    data = finnhub_client.quote(symbol)
 
     if data['c'] == 0:
         await ctx.send("No data found")
@@ -80,11 +87,11 @@ async def price(ctx, arg=""):
     color = 0x000000
 
     if data['d'] > 0:
-        color = 0x00FF00
+        color = discord.Color.green()
     elif data['d'] < 0:
-        color = 0xFF0000
+        color = discord.Color.red()
 
-    response = discord.Embed(title=arg, color=color)
+    response = discord.Embed(title=symbol, color=color)
 
     response.add_field(name="Current price",
                        value=f"{data['c']}", inline=False)
@@ -102,22 +109,22 @@ async def price(ctx, arg=""):
 
 
 @bot.command()
-async def cprice(ctx, arg=""):
+async def cprice(ctx, symbol=""):
     """Returns last price for a cryptocurrency"""
     # TODO: finish
-    if len(arg) == 0:
+    if len(symbol) == 0:
         await ctx.send("Invalid symbol")
         return
 
 
 @bot.command()
-async def earnings(ctx, arg=""):
+async def earnings(ctx, symbol=""):
     """Returns actual and estimated EPS for past 4 quarters for a stock"""
-    if len(arg) == 0:
+    if len(symbol) == 0:
         await ctx.send("Invalid symbol")
         return
 
-    earnings_vals = finnhub_client.company_earnings(arg)
+    earnings_vals = finnhub_client.company_earnings(symbol)
     """
     Example response:
     [{
@@ -126,7 +133,7 @@ async def earnings(ctx, arg=""):
     "period": "2019-03-31",
     "symbol": "AAPL"
     },
-    ... 
+    ...
     ]
     """
 
@@ -134,7 +141,7 @@ async def earnings(ctx, arg=""):
         await ctx.send("No data found")
         return
 
-    response = discord.Embed(title=f"Earnings Results for {arg.upper()}")
+    response = discord.Embed(title=f"Earnings Results for {symbol.upper()}")
 
     for quarter_results in earnings_vals:
         year, month, day = quarter_results['period'].split("-")
@@ -151,12 +158,12 @@ async def earnings(ctx, arg=""):
 
 
 @bot.command()
-async def news(ctx, arg=""):
+async def news(ctx, symbol=""):
     """
     Returns news for a company from 1 year ago to today
     Shows a maximum of 5 events
     """
-    if len(arg) == 0:
+    if len(symbol) == 0:
         await ctx.send("Invalid symbol")
         return
 
@@ -164,7 +171,7 @@ async def news(ctx, arg=""):
     from_date = from_date.strftime("%Y-%m-%d")
     to_date = date.today().strftime("%Y-%m-%d")
 
-    stock_news = finnhub_client.company_news(arg, from_date, to_date)[:5]
+    stock_news = finnhub_client.company_news(symbol, from_date, to_date)[:5]
     if len(stock_news) == 0:
         await ctx.send("No data found")
         return
@@ -174,7 +181,7 @@ async def news(ctx, arg=""):
     yesterday_str = yesterday_str.strftime("%m-%d-%Y")
 
     response = discord.Embed(
-        title=f"**News for {arg.upper()}**", color=discord.Color.blue())
+        title=f"**News for {symbol.upper()}**", color=discord.Color.blue())
 
     for event in stock_news:
         date_of_event = datetime.fromtimestamp(
@@ -192,25 +199,26 @@ async def news(ctx, arg=""):
 
 
 @bot.command()
-async def trends(ctx, arg=""):
+async def trends(ctx, symbol=""):
     """
     Returns analyst recommendations for stock(buy, sell, or hold) on monthly basis
     Will display recommendations for current month, then every previous 6 months for 3 years
     """
-    if len(arg) == 0:
+    if len(symbol) == 0:
         await ctx.send("Invalid symbol")
         return
 
-    arg = arg.upper()
+    symbol = symbol.upper()
 
     trends = finnhub_client.recommendation_trends(
-        arg)[:36:6]  # 6 results, going back 6 months for each result
+        symbol)[:36:6]  # 6 results, going back 6 months for each result
 
     if len(trends) == 0:
         await ctx.send("No data found")
         return
 
-    response = discord.Embed(title=f"Recommendation Trends for {arg}")
+    response = discord.Embed(
+        title=f"Recommendation Trends for {symbol}", color=discord.Color.blue())
 
     for trend in trends:
         year, month, day = trend['period'].split("-")
@@ -223,5 +231,77 @@ async def trends(ctx, arg=""):
         response.add_field(name=f"\n{time_period}", value=recommendations)
 
     await ctx.send(embed=response)
+
+
+@bot.command()
+async def chart(ctx, symbol="", type=""):
+    """
+    Creates chart for given stock
+    Values for chart type are '1', '5', '15', '30', '60', 'd', 'w' or 'm'
+    Defaults to 15m candlestick chart if no type given
+    """
+    if len(symbol) == 0:
+        await ctx.send("Invalid symbol")
+        return
+
+    if len(type) != 0 and type.lower() not in CHART_TYPES:
+        # if no chart type given, default is 15 min candle chart
+        # other types are 1d, 1m, 1y candles
+        await ctx.send("Invalid chart type")
+        return
+
+    if type == "":
+        type = '15'
+
+    symbol = symbol.upper()
+    type = type.upper()
+
+    from_timestamp = datetime.today()
+
+    if type == '1':
+        from_timestamp -= timedelta(seconds=60*60*5)
+    elif type == '5':
+        from_timestamp -= timedelta(seconds=60*60*15)
+    elif type == '15':
+        from_timestamp -= timedelta(seconds=60*60*24)
+    elif type == '30':
+        from_timestamp -= timedelta(seconds=60*60*24*10)
+    elif type == '60':
+        from_timestamp -= timedelta(seconds=60*60*24*20)
+
+    # TODO: seems like d,w,m timeframes aren't available from finnhub for most stocks, use different api
+    elif type == 'd':
+        from_timestamp -= timedelta(days=150)
+    elif type == 'w':
+        from_timestamp -= timedelta(days=365)
+    elif type == 'm':
+        from_timestamp -= timedelta(days=365)
+
+    from_timestamp = int(from_timestamp.timestamp())
+    to_timestamp = int(datetime.today().timestamp())
+
+    candles = finnhub_client.stock_candles(
+        symbol, type, from_timestamp, to_timestamp)
+
+    if len(candles) == 0 or candles['s'] == "no_data":
+        await ctx.send("No data")
+        return
+
+    data = pd.DataFrame(candles, index=pd.DatetimeIndex(
+        pd.to_datetime(
+            candles['t'], unit='s'))).drop(['s', 't'], axis=1)
+
+    data.rename(columns={'o': 'Open', 'c': 'Close',
+                'h': 'High', 'l': 'Low', 'v': 'Volume'}, inplace=True)
+
+    filename = str(datetime.now().timestamp()) + symbol + ".png"
+
+    mpf.plot(data, type='candle', style='nightclouds', mav=(
+        3, 15), volume=True, savefig=dict(fname=filename, bbox_inches='tight'))
+
+    await ctx.send(file=discord.File(filename))
+    os.remove(filename)
+    return
+
 
 bot.run(discord_token)
