@@ -5,8 +5,7 @@ from datetime import date, timedelta, datetime
 import pandas as pd
 import pandas_ta as ta
 import mplfinance as mpf
-import os
-
+import io
 
 api_key = None
 discord_token = None
@@ -293,8 +292,6 @@ async def chart(ctx, symbol="", type=""):
     data.rename(columns={'o': 'Open', 'c': 'Close',
                 'h': 'High', 'l': 'Low', 'v': 'Volume'}, inplace=True)
 
-    filename = str(datetime.now().timestamp()) + symbol + ".png"
-
     time_period = ""
 
     if type.isnumeric():
@@ -316,12 +313,15 @@ async def chart(ctx, symbol="", type=""):
     rsi_lower_line = mpf.make_addplot(
         lower_line, panel=2, color='g', secondary_y=False)
 
+    buf = io.BytesIO()
+
     mpf.plot(data, type='candle', title=f"{symbol} ({time_period})", style='yahoo', mav=(
         3, 15), volume=True, panel_ratios=(1, 0.2, 0.2), addplot=[rsi, rsi_upper_line, rsi_lower_line],
-        savefig=dict(fname=filename, bbox_inches='tight'), scale_padding={'left': 1, 'top': 0.3, 'right': 1, 'bottom': 1})
+        savefig=dict(fname=buf, bbox_inches='tight'), scale_padding={'left': 1, 'top': 0.3, 'right': 1, 'bottom': 1})
 
-    await ctx.send(file=discord.File(filename))
-    os.remove(filename)
+    buf.seek(0)
+    filename = str(datetime.now().timestamp()) + symbol + ".png"
+    await ctx.send(file=discord.File(buf, filename=filename))
     return
 
 
