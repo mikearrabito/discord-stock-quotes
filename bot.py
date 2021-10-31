@@ -2,7 +2,6 @@ import finnhub
 import discord
 from discord.ext import commands
 from datetime import date, timedelta, datetime
-from matplotlib.pyplot import hlines, savefig, ylabel
 import pandas as pd
 import pandas_ta as ta
 import mplfinance as mpf
