@@ -261,11 +261,11 @@ async def chart(ctx, symbol="", type=""):
     elif type == '5':
         from_timestamp -= timedelta(seconds=60*60*20)
     elif type == '15':
-        from_timestamp -= timedelta(seconds=60*60*60)
+        from_timestamp -= timedelta(days=1)
     elif type == '30':
-        from_timestamp -= timedelta(seconds=60*60*24*10)
+        from_timestamp -= timedelta(days=10)
     elif type == '60':
-        from_timestamp -= timedelta(seconds=60*60*24*20)
+        from_timestamp -= timedelta(days=20)
 
     # TODO: seems like d,w,m timeframes aren't available from finnhub for most stocks, use different api
     elif type == 'd':
